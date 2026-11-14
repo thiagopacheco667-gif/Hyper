@@ -32,6 +32,12 @@ data class IslandGeometry(
     fun windowX(width: Int): Int = (centerX - width / 2).coerceIn(0, (screenWidth - width).coerceAtLeast(0))
 
     companion object {
+        // Valores padrão; ficam ajustáveis na central de personalização (Etapa 4).
+        const val COMPACT_WIDTH_DP = 96f
+        const val COMPACT_HEIGHT_DP = 28f
+        const val PEEK_WIDTH_DP = 196f
+        const val EXPANDED_HEIGHT_DP = 150f
+
         fun compute(context: Context, windowManager: WindowManager): IslandGeometry {
             val density = context.resources.displayMetrics.density
             fun dp(v: Float) = (v * density).roundToInt()
@@ -47,23 +53,18 @@ data class IslandGeometry(
                     ?.getDisplay(Display.DEFAULT_DISPLAY)?.cutout
             val hole: Rect? = cutout?.boundingRectTop?.takeIf { !it.isEmpty }
 
-            val compactHeight: Int
-            val top: Int
-            val centerX: Int
-            if (hole != null) {
-                compactHeight = (hole.height() + dp(10f)).coerceIn(dp(28f), dp(44f))
-                top = (hole.centerY() - compactHeight / 2).coerceAtLeast(0)
-                centerX = hole.centerX()
-            } else {
-                compactHeight = dp(32f)
-                top = dp(6f)
-                centerX = width / 2
-            }
+            // O HyperOS informa o recorte como a faixa inteira da barra de status, não o furo real.
+            // Por isso só usamos o centro dele; o tamanho é fixo em dp, menor que o espaço
+            // entre os ícones de notificação (esquerda) e os de sinal/bateria (direita).
+            val compactHeight = dp(COMPACT_HEIGHT_DP)
+            val centerX = hole?.centerX() ?: (width / 2)
+            val centerY = hole?.centerY() ?: dp(18f)
+            val top = (centerY - compactHeight / 2).coerceAtLeast(dp(2f))
 
-            val compactWidth = (compactHeight * 3.4f).roundToInt().coerceAtLeast(dp(104f))
-            val peekWidth = dp(232f).coerceAtMost(width - dp(24f))
-            val expandedWidth = (width - dp(24f)).coerceAtMost(dp(420f))
-            val expandedHeight = dp(164f)
+            val compactWidth = dp(COMPACT_WIDTH_DP)
+            val peekWidth = dp(PEEK_WIDTH_DP).coerceAtMost(width - dp(24f))
+            val expandedWidth = (width - dp(24f)).coerceAtMost(dp(400f))
+            val expandedHeight = dp(EXPANDED_HEIGHT_DP)
 
             return IslandGeometry(
                 screenWidth = width,

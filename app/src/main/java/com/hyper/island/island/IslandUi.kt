@@ -102,7 +102,7 @@ fun IslandRoot(
     )
     val size = with(density) { DpSize(sizePx.width.toDp(), sizePx.height.toDp()) }
     val corner by animateDpAsState(
-        targetValue = if (mode == IslandMode.EXPANDED) 38.dp else target.height / 2,
+        targetValue = if (mode == IslandMode.EXPANDED) 34.dp else target.height / 2,
         animationSpec = islandSpring(),
         label = "islandCorner",
     )
@@ -149,7 +149,7 @@ private fun CompactContent(battery: BatteryInfo) {
     Row(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 12.dp),
+            .padding(horizontal = 10.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -182,28 +182,29 @@ private fun PeekContent(battery: BatteryInfo) {
     Row(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 16.dp),
+            .padding(horizontal = 14.dp),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            BatteryGlyph(battery)
-            Spacer(Modifier.width(8.dp))
-            Text(
-                text = if (battery.charging) "Carregando" else "Bateria baixa",
-                color = IslandColors.Primary,
-                fontSize = 13.sp,
-                fontWeight = FontWeight.Medium,
-                maxLines = 1,
-            )
-        }
+        // O furo da câmera fica no meio: texto à esquerda, bateria à direita.
         Text(
-            text = "${battery.level}%",
-            color = accent,
-            fontSize = 14.sp,
-            fontWeight = FontWeight.SemiBold,
+            text = if (battery.charging) "Carregando" else "Bateria baixa",
+            color = IslandColors.Primary,
+            fontSize = 12.sp,
+            fontWeight = FontWeight.Medium,
             maxLines = 1,
         )
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                text = "${battery.level}%",
+                color = accent,
+                fontSize = 13.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+            )
+            Spacer(Modifier.width(6.dp))
+            BatteryGlyph(battery)
+        }
     }
 }
 
@@ -229,7 +230,7 @@ private fun ExpandedContent(battery: BatteryInfo, fullSize: DpSize) {
             Modifier
                 .wrapContentSize(Alignment.TopCenter, unbounded = true)
                 .size(fullSize)
-                .padding(start = 24.dp, end = 22.dp, top = 22.dp, bottom = 16.dp),
+                .padding(start = 22.dp, end = 20.dp, top = 18.dp, bottom = 14.dp),
         ) {
             Row(
                 Modifier.fillMaxWidth(),
@@ -237,10 +238,10 @@ private fun ExpandedContent(battery: BatteryInfo, fullSize: DpSize) {
                 verticalAlignment = Alignment.Top,
             ) {
                 Column {
-                    Text(time, color = IslandColors.Primary, fontSize = 42.sp, fontWeight = FontWeight.Light)
+                    Text(time, color = IslandColors.Primary, fontSize = 38.sp, fontWeight = FontWeight.Light)
                     Text(date, color = IslandColors.Secondary, fontSize = 13.sp, maxLines = 1)
                 }
-                BatteryRing(battery, ringSize = 70.dp)
+                BatteryRing(battery, ringSize = 62.dp)
             }
             Spacer(Modifier.weight(1f))
             Text(
@@ -319,7 +320,7 @@ private fun BatteryGlyph(battery: BatteryInfo, modifier: Modifier = Modifier) {
         battery.low -> IslandColors.Red
         else -> IslandColors.Primary
     }
-    Canvas(modifier.size(width = 24.dp, height = 12.dp)) {
+    Canvas(modifier.size(width = 20.dp, height = 10.dp)) {
         val stroke = 1.2.dp.toPx()
         val nub = 2.dp.toPx()
         val bodyW = size.width - nub - 1.dp.toPx()
