@@ -3,10 +3,9 @@ package com.hyper.island.island
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.VectorConverter
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateValueAsState
+import androidx.compose.animation.core.animateSizeAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
@@ -94,13 +93,14 @@ fun IslandRoot(
     val target = geometry.sizeFor(mode).toDp()
     val expandedSize = geometry.expanded.toDp()
 
-    val size by animateValueAsState(
-        targetValue = target,
-        typeConverter = DpSize.VectorConverter,
+    val targetPx = geometry.sizeFor(mode).let { Size(it.width.toFloat(), it.height.toFloat()) }
+    val sizePx by animateSizeAsState(
+        targetValue = targetPx,
         animationSpec = islandSpring(),
         label = "islandSize",
         finishedListener = { actions.onAnimationSettled() },
     )
+    val size = with(density) { DpSize(sizePx.width.toDp(), sizePx.height.toDp()) }
     val corner by animateDpAsState(
         targetValue = if (mode == IslandMode.EXPANDED) 38.dp else target.height / 2,
         animationSpec = islandSpring(),
