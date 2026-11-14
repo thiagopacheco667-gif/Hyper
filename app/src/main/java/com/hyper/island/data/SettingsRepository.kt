@@ -28,7 +28,17 @@ class SettingsRepository(context: Context) {
         store.edit { it[KEY_ISLAND_ENABLED] = enabled }
     }
 
+    /** Esconder a ilha enquanto algum player toca, deixando o Hyper Island do sistema sozinho. */
+    val yieldDuringMedia: Flow<Boolean> = store.data
+        .map { it[KEY_YIELD_DURING_MEDIA] ?: true }
+        .distinctUntilChanged()
+
+    suspend fun setYieldDuringMedia(enabled: Boolean) {
+        store.edit { it[KEY_YIELD_DURING_MEDIA] = enabled }
+    }
+
     private companion object {
         val KEY_ISLAND_ENABLED = booleanPreferencesKey("island_enabled")
+        val KEY_YIELD_DURING_MEDIA = booleanPreferencesKey("yield_during_media")
     }
 }

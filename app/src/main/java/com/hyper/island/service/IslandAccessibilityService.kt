@@ -6,12 +6,18 @@ import android.service.notification.NotificationListenerService
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import com.hyper.island.data.SettingsRepository
+import com.hyper.island.integration.MediaRepository
 import com.hyper.island.integration.NotificationRepository
 import com.hyper.island.island.IslandMode
 import com.hyper.island.overlay.IslandWindowController
 import com.hyper.island.system.BatteryMonitor
 import com.hyper.island.system.Permissions
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.MainScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.transformLatest
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -30,6 +36,7 @@ class IslandAccessibilityService : AccessibilityService() {
     private var battery: BatteryMonitor? = null
     private var enabledInSettings = true
 
+    @OptIn(ExperimentalCoroutinesApi::class)
     override fun onServiceConnected() {
         super.onServiceConnected()
         scope.cancel()
@@ -50,9 +57,20 @@ class IslandAccessibilityService : AccessibilityService() {
             runCatching { NotificationListenerService.requestRebind(IslandNotificationListener.component(this)) }
         }
 
+        val settings = SettingsRepository(applicationContext)
+        // Quando um player começa, some na hora; quando para, espera um pouco antes de voltar
+        // (evita piscar na troca de faixa ou num pause rápido).
+        val mediaPlaying = MediaRepository.anyPlaying
+            .transformLatest { playing ->
+                if (!playing) delay(MEDIA_RETURN_DELAY_MS)
+                emit(playing)
+            }
+            .distinctUntilChanged()
         scope.launch {
-            SettingsRepository(applicationContext).islandEnabled.collect { enabled ->
-                enabledInSettings = enabled
+            combine(settings.islandEnabled, settings.yieldDuringMedia, mediaPlaying) { enabled, yieldToSystem, playing ->
+                enabled && !(yieldToSystem && playing)
+            }.collect { visible ->
+                enabledInSettings = visible
                 updateVisibility()
             }
         }
@@ -92,6 +110,8 @@ class IslandAccessibilityService : AccessibilityService() {
     }
 
     companion object {
+        private const val MEDIA_RETURN_DELAY_MS = 2_500L
+
         private val _running = MutableStateFlow(false)
 
         /** Se o serviço está conectado agora (para a tela de status). */

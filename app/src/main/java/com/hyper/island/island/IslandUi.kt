@@ -3,9 +3,9 @@ package com.hyper.island.island
 import android.view.HapticFeedbackConstants
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateRectAsState
 import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateSizeAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
@@ -25,6 +25,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -33,6 +34,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -45,6 +47,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
@@ -56,6 +59,7 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.hyper.island.integration.MediaInfo
@@ -64,6 +68,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
+import kotlin.math.roundToInt
 
 @Composable
 fun IslandRoot(
@@ -79,27 +84,34 @@ fun IslandRoot(
     val density = LocalDensity.current
     val view = LocalView.current
 
-    val target = IslandLayout.size(geometry, screen)
-    val sizePx by animateSizeAsState(
-        targetValue = Size(target.width.toFloat(), target.height.toFloat()),
+    // Um único retângulo animado (posição + tamanho), para a janela só encolher quando tudo terminar.
+    val frame = IslandLayout.frame(geometry, screen)
+    val rect by animateRectAsState(
+        targetValue = Rect(
+            0f,
+            frame.offsetY.toFloat(),
+            frame.width.toFloat(),
+            (frame.offsetY + frame.height).toFloat(),
+        ),
         animationSpec = islandSpring(),
-        label = "islandSize",
+        label = "islandRect",
         finishedListener = { actions.onAnimationSettled() },
     )
-    val size = with(density) { DpSize(sizePx.width.toDp(), sizePx.height.toDp()) }
     val isPanel = screen is IslandScreen.Alert || screen is IslandScreen.Clock ||
         screen is IslandScreen.Dashboard || screen is IslandScreen.Detail
-    val corner by animateDpAsState(
-        targetValue = if (isPanel) 34.dp else with(density) { (target.height / 2f).toDp() },
+    val corner by animateFloatAsState(
+        targetValue = if (isPanel) geometry.panelCorner.toFloat() else frame.height / 2f,
         animationSpec = islandSpring(),
         label = "islandCorner",
     )
 
+    CompositionLocalProvider(LocalIslandGeometry provides geometry) {
     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
         Box(
             Modifier
-                .size(size)
-                .clip(RoundedCornerShape(corner))
+                .offset { IntOffset(0, rect.top.roundToInt()) }
+                .size(with(density) { DpSize(rect.width.toDp(), rect.height.toDp()) })
+                .clip(RoundedCornerShape(with(density) { corner.toDp() }))
                 .background(IslandColors.Surface)
                 .pointerInput(Unit) {
                     detectTapGestures(
@@ -123,7 +135,7 @@ fun IslandRoot(
                 },
                 label = "islandContent",
             ) { s ->
-                val full = IslandLayout.size(geometry, s).let { with(density) { DpSize(it.width.toDp(), it.height.toDp()) } }
+                val full = IslandLayout.frame(geometry, s).let { with(density) { DpSize(it.width.toDp(), it.height.toDp()) } }
                 // Cada tela é desenhada no tamanho final: durante a animação só é recortada, não reflui.
                 FixedFrame(full) {
                     when (s) {
@@ -140,6 +152,7 @@ fun IslandRoot(
                 }
             }
         }
+    }
     }
 }
 
@@ -187,18 +200,25 @@ private fun CompactContent(battery: BatteryInfo) {
     }
 }
 
-/** Cápsula com música tocando: capa à esquerda do furo, equalizador à direita. */
+/** Cápsula com música tocando, como no Hyper Island: capa à esquerda, barras na cor da capa à direita. */
 @Composable
 private fun CompactMediaContent(media: MediaInfo?) {
     Row(
         Modifier
             .fillMaxSize()
-            .padding(horizontal = 6.dp),
+            .padding(start = ref(22f), end = ref(30f)),
         horizontalArrangement = Arrangement.SpaceBetween,
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Artwork(media?.art, size = 18.dp, corner = 6.dp)
-        if (media?.isPlaying == true) EqualizerBars(Modifier.padding(end = 3.dp)) else Spacer(Modifier.size(16.dp))
+        Artwork(media?.art, size = ref(60f), corner = ref(16f))
+        if (media?.isPlaying == true) {
+            EqualizerBars(
+                color = media.accentColor?.let { Color(it) } ?: IslandColors.Green,
+                width = ref(54f),
+                height = ref(38f),
+                bars = 5,
+            )
+        }
     }
 }
 

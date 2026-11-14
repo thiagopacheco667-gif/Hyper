@@ -49,41 +49,51 @@ sealed interface IslandScreen {
     }
 }
 
-/** Medidas de cada tela (em dp), usadas tanto pela janela quanto pela animação. */
+/** Retângulo da ilha dentro da janela: deslocamento vertical (a partir do topo da cápsula) e tamanho. */
+data class IslandFrame(val offsetY: Int, val width: Int, val height: Int) {
+    val windowSize: IntSize get() = IntSize(width, offsetY + height)
+}
+
+/** Medidas de cada tela, usadas tanto pela janela quanto pela animação. */
 object IslandLayout {
     const val MAX_ROWS = 3
 
-    const val COMPACT_MEDIA_WIDTH = 136f
+    // Em dp.
     const val CLOCK_HEIGHT = 150f
     const val ALERT_HEIGHT = 100f
     const val DETAIL_HEIGHT = 232f
-
-    /** Faixa superior dos painéis, alinhada ao furo da câmera. */
-    const val BAND = 28f
-    const val MEDIA_CARD = 128f
     const val ROW = 54f
     const val MORE = 22f
-    const val GAP = 10f
-    const val BOTTOM = 14f
+    const val LIST_PADDING = 10f
 
-    fun dashboardHeight(hasMedia: Boolean, rows: Int, hasMore: Boolean): Float {
-        var h = BAND + BOTTOM
-        if (hasMedia) h += GAP + MEDIA_CARD
-        if (rows > 0) h += GAP + rows * ROW
-        if (hasMore) h += MORE
-        return h
+    /** Player expandido do Hyper Island de fábrica (px na referência de 1220 px). */
+    const val REF_MEDIA_PANEL = 522f
+
+    fun frame(geometry: IslandGeometry, screen: IslandScreen): IslandFrame = with(geometry) {
+        val panelOffset = panelTop - top
+        when (screen) {
+            IslandScreen.Compact, IslandScreen.CompactMedia -> IslandFrame(0, compact.width, compact.height)
+            IslandScreen.Peek -> IslandFrame(0, peek.width, peek.height)
+            IslandScreen.Clock -> IslandFrame(panelOffset, panelWidth, dp(CLOCK_HEIGHT))
+            is IslandScreen.Alert -> IslandFrame(panelOffset, panelWidth, dp(ALERT_HEIGHT))
+            is IslandScreen.Dashboard -> IslandFrame(panelOffset, panelWidth, dashboardHeight(geometry, screen))
+            is IslandScreen.Detail -> IslandFrame(panelOffset, panelWidth, dp(DETAIL_HEIGHT))
+        }
     }
 
-    fun size(geometry: IslandGeometry, screen: IslandScreen): IntSize = with(geometry) {
-        when (screen) {
-            IslandScreen.Compact -> compact
-            IslandScreen.CompactMedia -> IntSize(dp(COMPACT_MEDIA_WIDTH), compact.height)
-            IslandScreen.Peek -> peek
-            IslandScreen.Clock -> IntSize(panelWidth, dp(CLOCK_HEIGHT))
-            is IslandScreen.Alert -> IntSize(panelWidth, dp(ALERT_HEIGHT))
-            is IslandScreen.Dashboard -> IntSize(panelWidth, dp(dashboardHeight(screen.hasMedia, screen.rows, screen.hasMore)))
-            is IslandScreen.Detail -> IntSize(panelWidth, dp(DETAIL_HEIGHT))
+    /** Tamanho da janela para a tela (inclui o espaço acima dos painéis). */
+    fun size(geometry: IslandGeometry, screen: IslandScreen): IntSize = frame(geometry, screen).windowSize
+
+    private fun dashboardHeight(g: IslandGeometry, screen: IslandScreen.Dashboard): Int {
+        var h = 0
+        if (screen.hasMedia) h += g.ref(REF_MEDIA_PANEL)
+        if (screen.rows > 0) {
+            var list = screen.rows * ROW + LIST_PADDING
+            if (!screen.hasMedia) list += LIST_PADDING
+            if (screen.hasMore) list += MORE
+            h += g.dp(list)
         }
+        return h
     }
 
     fun resolve(

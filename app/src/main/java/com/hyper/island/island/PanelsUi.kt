@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -28,6 +29,10 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.geometry.CornerRadius
@@ -42,15 +47,11 @@ import com.hyper.island.integration.IslandNotification
 import com.hyper.island.integration.MediaInfo
 import com.hyper.island.system.BatteryInfo
 import kotlinx.coroutines.delay
-import java.time.format.DateTimeFormatter
 
-/** Espaço reservado para o furo da câmera no meio da faixa superior. */
-private val CameraGap = 44.dp
+/** Altura da linha de cabeçalho dos painéis (app à esquerda, hora à direita). */
+private val HeaderHeight = 34.dp
 
-/**
- * Faixa superior dos painéis (altura [IslandLayout.BAND]), centrada no furo da câmera:
- * conteúdo à esquerda e à direita, nunca por baixo da lente.
- */
+/** Cabeçalho dos painéis. Eles ficam abaixo da barra de status, então não há furo da câmera por cima. */
 @Composable
 private fun TopBand(
     start: @Composable RowScope.() -> Unit,
@@ -59,12 +60,12 @@ private fun TopBand(
     Row(
         Modifier
             .fillMaxWidth()
-            .height(IslandLayout.BAND.dp)
-            .padding(horizontal = 20.dp),
+            .height(HeaderHeight)
+            .padding(start = 20.dp, end = 20.dp, top = 6.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         Row(Modifier.weight(1f), verticalAlignment = Alignment.CenterVertically, content = start)
-        Spacer(Modifier.width(CameraGap))
+        Spacer(Modifier.width(12.dp))
         Row(
             Modifier.weight(1f),
             horizontalArrangement = Arrangement.End,
@@ -120,7 +121,7 @@ internal fun AlertContent(notification: IslandNotification) {
     }
 }
 
-/** Painel principal: hora e bateria, player e notificações recentes. */
+/** Painel principal: player (no layout do Hyper Island) e notificações recentes. */
 @Composable
 internal fun DashboardContent(
     battery: BatteryInfo,
@@ -128,26 +129,11 @@ internal fun DashboardContent(
     notifications: List<IslandNotification>,
     actions: IslandActions,
 ) {
-    val clock = rememberMinuteClock()
-    val time = remember(clock) { clock.format(DateTimeFormatter.ofPattern("HH:mm")) }
     Column(Modifier.fillMaxSize()) {
-        TopBand(
-            start = {
-                Text(time, color = IslandColors.Primary, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
-            },
-            end = {
-                Text("${battery.level}%", color = IslandColors.Secondary, fontSize = 12.sp)
-                Spacer(Modifier.width(6.dp))
-                BatteryGlyph(battery)
-            },
-        )
-        if (media != null) {
-            Spacer(Modifier.height(IslandLayout.GAP.dp))
-            MediaCard(media, actions)
-        }
+        if (media != null) MediaPanel(media, actions)
         val visible = notifications.take(IslandLayout.MAX_ROWS)
         if (visible.isNotEmpty()) {
-            Spacer(Modifier.height(IslandLayout.GAP.dp))
+            Spacer(Modifier.height(if (media == null) IslandLayout.LIST_PADDING.dp else 0.dp))
             visible.forEach { NotificationRow(it, actions) }
         }
         val more = notifications.size - visible.size
@@ -168,66 +154,116 @@ internal fun DashboardContent(
     }
 }
 
+/**
+ * Player expandido com as mesmas medidas do Hyper Island de fábrica
+ * (valores em px na tela de referência de 1220 px, convertidos por [ref]).
+ */
 @Composable
-private fun MediaCard(media: MediaInfo, actions: IslandActions) {
-    Column(
+private fun MediaPanel(media: MediaInfo, actions: IslandActions) {
+    val accent = media.accentColor?.let { Color(it) } ?: IslandColors.Tertiary
+    Box(
         Modifier
             .fillMaxWidth()
-            .height(IslandLayout.MEDIA_CARD.dp)
-            .padding(horizontal = 18.dp),
+            .height(ref(IslandLayout.REF_MEDIA_PANEL))
+            .drawBehind {
+                // Brilho na cor da capa, vindo do canto inferior esquerdo.
+                drawRect(
+                    Brush.radialGradient(
+                        colors = listOf(accent.copy(alpha = 0.5f), Color.Transparent),
+                        center = Offset(size.width * 0.12f, size.height * 1.05f),
+                        radius = size.width * 0.62f,
+                    ),
+                )
+            },
     ) {
-        Row(Modifier.height(52.dp), verticalAlignment = Alignment.CenterVertically) {
-            Artwork(media.art, size = 52.dp, corner = 12.dp)
-            Spacer(Modifier.width(12.dp))
+        // Capa + título/artista.
+        Row(
+            Modifier
+                .padding(start = ref(50f), top = ref(49f), end = ref(50f))
+                .height(ref(171f)),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Box {
+                Artwork(media.art, size = ref(171f), corner = ref(34f))
+                // Selo do app de origem no canto da capa.
+                val appIcon = remember(media.packageName) { media.packageName }
+                AppBadge(appIcon, Modifier.align(Alignment.BottomEnd).padding(ref(10f)))
+            }
+            Spacer(Modifier.width(ref(42f)))
             Column(Modifier.weight(1f)) {
                 Text(
                     media.title,
                     color = IslandColors.Primary,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.SemiBold,
+                    fontSize = refSp(54f),
+                    fontWeight = FontWeight.Medium,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
+                Spacer(Modifier.height(ref(14f)))
                 Text(
                     media.artist.ifBlank { media.appLabel },
                     color = IslandColors.Secondary,
-                    fontSize = 13.sp,
+                    fontSize = refSp(38f),
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (media.isPlaying) {
-                Spacer(Modifier.width(8.dp))
-                EqualizerBars()
-            }
         }
-        Spacer(Modifier.height(8.dp))
-        ProgressRow(media, actions)
+
+        // Controles centralizados (centros a 220 px uns dos outros, como no original).
         Row(
             Modifier
                 .fillMaxWidth()
-                .height(40.dp),
+                .padding(top = ref(296f))
+                .height(ref(80f)),
             horizontalArrangement = Arrangement.Center,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            ControlButton(enabled = media.canSkipPrevious, onClick = actions::onPrevious) {
-                SkipGlyph(22.dp, forward = false)
+            ControlButton(ref(100f), enabled = media.canSkipPrevious, onClick = actions::onPrevious) {
+                SkipGlyph(ref(56f), forward = false)
             }
-            Spacer(Modifier.width(28.dp))
-            ControlButton(enabled = true, onClick = actions::onPlayPause) {
-                if (media.isPlaying) PauseGlyph(30.dp) else PlayGlyph(30.dp)
+            Spacer(Modifier.width(ref(120f)))
+            ControlButton(ref(100f), enabled = true, onClick = actions::onPlayPause) {
+                if (media.isPlaying) PauseGlyph(ref(68f)) else PlayGlyph(ref(68f))
             }
-            Spacer(Modifier.width(28.dp))
-            ControlButton(enabled = media.canSkipNext, onClick = actions::onNext) {
-                SkipGlyph(22.dp, forward = true)
+            Spacer(Modifier.width(ref(120f)))
+            ControlButton(ref(100f), enabled = media.canSkipNext, onClick = actions::onNext) {
+                SkipGlyph(ref(56f), forward = true)
             }
+        }
+
+        // Barra de progresso com os tempos nas laterais.
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .padding(top = ref(418f), start = ref(74f), end = ref(78f))
+                .height(ref(60f)),
+        ) {
+            ProgressRow(media, actions)
         }
     }
 }
 
 @Composable
-private fun ControlButton(enabled: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
-    val modifier = Modifier.size(40.dp)
+private fun AppBadge(packageName: String, modifier: Modifier = Modifier) {
+    val context = androidx.compose.ui.platform.LocalContext.current
+    val icon = remember(packageName) { com.hyper.island.integration.AppInfoCache.icon(context, packageName) }
+    if (icon != null) {
+        Box(
+            modifier
+                .size(ref(40f))
+                .clip(CircleShape)
+                .background(IslandColors.Surface.copy(alpha = 0.5f))
+                .padding(ref(3f)),
+        ) {
+            Artwork(icon, size = ref(34f), corner = ref(17f))
+        }
+    }
+}
+
+@Composable
+private fun ControlButton(size: Dp, enabled: Boolean, onClick: () -> Unit, content: @Composable () -> Unit) {
+    val modifier = Modifier.size(size)
     Box(
         if (enabled) modifier.islandClick(onClick) else modifier.alpha(0.3f),
         contentAlignment = Alignment.Center,
@@ -246,23 +282,19 @@ private fun ProgressRow(media: MediaInfo, actions: IslandActions) {
         }
     }
     val duration = media.durationMs
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .height(22.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
+    Row(Modifier.fillMaxSize(), verticalAlignment = Alignment.CenterVertically) {
         if (duration > 0) {
             val position = media.currentPosition(now)
             val fraction = (position.toFloat() / duration).coerceIn(0f, 1f)
             val canSeek = media.canSeek
             val latestSeek by rememberUpdatedState(actions::onSeek)
-            Text(formatDuration(position), color = IslandColors.Tertiary, fontSize = 10.sp)
-            Spacer(Modifier.width(8.dp))
+            Box(Modifier.width(ref(187f))) {
+                Text(formatDuration(position), color = IslandColors.Tertiary, fontSize = refSp(34f))
+            }
             Canvas(
                 Modifier
                     .weight(1f)
-                    .height(16.dp)
+                    .fillMaxHeight()
                     .pointerInput(canSeek, duration) {
                         if (!canSeek) return@pointerInput
                         detectTapGestures { offset ->
@@ -271,14 +303,15 @@ private fun ProgressRow(media: MediaInfo, actions: IslandActions) {
                         }
                     },
             ) {
-                val barH = 4.dp.toPx()
+                val barH = size.height * 0.2f
                 val y = (size.height - barH) / 2
                 val r = CornerRadius(barH / 2)
                 drawRoundRect(IslandColors.Track, Offset(0f, y), Size(size.width, barH), r)
                 drawRoundRect(IslandColors.Primary, Offset(0f, y), Size(size.width * fraction, barH), r)
             }
-            Spacer(Modifier.width(8.dp))
-            Text(formatDuration(duration), color = IslandColors.Tertiary, fontSize = 10.sp)
+            Box(Modifier.width(ref(187f)), contentAlignment = Alignment.CenterEnd) {
+                Text(formatDuration(duration), color = IslandColors.Tertiary, fontSize = refSp(34f))
+            }
         }
     }
 }

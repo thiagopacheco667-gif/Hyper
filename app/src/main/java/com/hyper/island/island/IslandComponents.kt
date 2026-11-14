@@ -17,6 +17,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -34,9 +35,12 @@ import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
+import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
+import com.hyper.island.overlay.IslandGeometry
 
 internal object IslandColors {
     val Surface = Color(0xFF000000)
@@ -50,6 +54,22 @@ internal object IslandColors {
 }
 
 internal fun <T> islandSpring() = spring<T>(dampingRatio = 0.78f, stiffness = 420f)
+
+internal val LocalIslandGeometry = compositionLocalOf<IslandGeometry> { error("Geometria da ilha não fornecida") }
+
+/** Converte uma medida do Hyper Island de fábrica (px na tela de referência de 1220 px) em dp. */
+@Composable
+internal fun ref(px: Float): Dp {
+    val geometry = LocalIslandGeometry.current
+    return with(LocalDensity.current) { (px * geometry.scale).toDp() }
+}
+
+/** Mesmo que [ref], para tamanhos de fonte. */
+@Composable
+internal fun refSp(px: Float): TextUnit {
+    val geometry = LocalIslandGeometry.current
+    return with(LocalDensity.current) { (px * geometry.scale).toSp() }
+}
 
 /**
  * Toque em um controle interno da ilha, com leve encolhimento ao pressionar e vibração.
@@ -95,22 +115,27 @@ internal fun Artwork(bitmap: Bitmap?, size: Dp, corner: Dp, modifier: Modifier =
     }
 }
 
-/** Equalizador animado. Só é composto enquanto a música toca. */
+/** Equalizador animado (barras verticais como no Hyper Island). Só é composto enquanto a música toca. */
 @Composable
-internal fun EqualizerBars(modifier: Modifier = Modifier, color: Color = IslandColors.Green) {
+internal fun EqualizerBars(
+    modifier: Modifier = Modifier,
+    color: Color = IslandColors.Green,
+    width: Dp = 16.dp,
+    height: Dp = 12.dp,
+    bars: Int = 4,
+) {
     val transition = rememberInfiniteTransition(label = "eq")
-    val durations = intArrayOf(420, 560, 380, 500)
-    val levels = durations.mapIndexed { i, d ->
+    val durations = intArrayOf(420, 560, 380, 500, 460, 340)
+    val levels = (0 until bars).map { i ->
         transition.animateFloat(
-            initialValue = 0.25f + 0.1f * i,
+            initialValue = 0.2f + 0.08f * (i % 4),
             targetValue = 1f,
-            animationSpec = infiniteRepeatable(tween(d), RepeatMode.Reverse),
+            animationSpec = infiniteRepeatable(tween(durations[i % durations.size]), RepeatMode.Reverse),
             label = "eq$i",
         )
     }
-    Canvas(modifier.size(width = 16.dp, height = 12.dp)) {
-        val count = levels.size
-        val barW = size.width / (count * 2 - 1)
+    Canvas(modifier.size(width = width, height = height)) {
+        val barW = size.width / (bars * 2 - 1)
         levels.forEachIndexed { i, level ->
             val h = size.height * level.value
             drawRoundRect(

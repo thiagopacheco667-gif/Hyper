@@ -3,6 +3,7 @@ package com.hyper.island.integration
 import android.content.ComponentName
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Color
 import android.media.MediaMetadata
 import android.media.session.MediaController
 import android.media.session.MediaSession
@@ -23,6 +24,8 @@ data class MediaInfo(
     val title: String,
     val artist: String,
     val art: Bitmap?,
+    /** Cor de destaque tirada da capa (barras e brilho do painel, como no HyperOS). */
+    val accentColor: Int?,
     val isPlaying: Boolean,
     val durationMs: Long,
     /** Posição informada pelo player no instante [positionUpdatedAt] (elapsedRealtime). */
@@ -53,6 +56,11 @@ object MediaRepository {
     private val _media = MutableStateFlow<MediaInfo?>(null)
     val media: StateFlow<MediaInfo?> = _media.asStateFlow()
 
+    private val _anyPlaying = MutableStateFlow(false)
+
+    /** Algum player (música ou vídeo) está tocando agora, em qualquer app. */
+    val anyPlaying: StateFlow<Boolean> = _anyPlaying.asStateFlow()
+
     private var appContext: Context? = null
     private var manager: MediaSessionManager? = null
     private var listenerComponent: ComponentName? = null
@@ -62,6 +70,7 @@ object MediaRepository {
     // Cache da capa reduzida: evita redimensionar a cada mudança de estado.
     private var artSource: Bitmap? = null
     private var artScaled: Bitmap? = null
+    private var artAccent: Int? = null
 
     private val sessionsListener = MediaSessionManager.OnActiveSessionsChangedListener { controllers ->
         updateControllers(controllers.orEmpty())
@@ -130,6 +139,7 @@ object MediaRepository {
             ?: active?.takeIf { a -> controllers.any { it.sessionToken == a.sessionToken } && a.metadata != null }
             ?: controllers.firstOrNull { it.metadata != null }
         _media.value = active?.let(::buildInfo)
+        _anyPlaying.value = controllers.any { it.playbackState?.state == PlaybackState.STATE_PLAYING }
     }
 
     private fun buildInfo(controller: MediaController): MediaInfo? {
@@ -150,6 +160,7 @@ object MediaRepository {
             title = title,
             artist = artist,
             art = scaledArt(metadata),
+            accentColor = artAccent,
             isPlaying = state?.state == PlaybackState.STATE_PLAYING,
             durationMs = metadata.getLong(MediaMetadata.METADATA_KEY_DURATION).coerceAtLeast(0),
             positionMs = state?.position ?: 0L,
@@ -165,7 +176,12 @@ object MediaRepository {
         val source = metadata.getBitmap(MediaMetadata.METADATA_KEY_ALBUM_ART)
             ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_ART)
             ?: metadata.getBitmap(MediaMetadata.METADATA_KEY_DISPLAY_ICON)
-            ?: return null
+            ?: run {
+                artSource = null
+                artScaled = null
+                artAccent = null
+                return null
+            }
         if (source === artSource) return artScaled
         val scale = ART_PX.toFloat() / max(source.width, source.height)
         val scaled = if (scale < 1f) {
@@ -180,6 +196,30 @@ object MediaRepository {
         }
         artSource = source
         artScaled = scaled
+        artAccent = runCatching { accentOf(scaled) }.getOrNull()
         return scaled
+    }
+
+    /** Cor mais viva da capa, clareada para aparecer sobre o preto. */
+    private fun accentOf(bitmap: Bitmap): Int? {
+        val software = if (bitmap.config == Bitmap.Config.HARDWARE) bitmap.copy(Bitmap.Config.ARGB_8888, false) else bitmap
+        val small = Bitmap.createScaledBitmap(software, 12, 12, true)
+        val hsv = FloatArray(3)
+        var best: FloatArray? = null
+        var bestScore = 0f
+        for (y in 0 until small.height) {
+            for (x in 0 until small.width) {
+                Color.colorToHSV(small.getPixel(x, y), hsv)
+                val score = hsv[1] * hsv[2]
+                if (score > bestScore) {
+                    bestScore = score
+                    best = hsv.copyOf()
+                }
+            }
+        }
+        val chosen = best?.takeIf { bestScore > 0.12f } ?: return null
+        chosen[1] = chosen[1].coerceIn(0.35f, 0.85f)
+        chosen[2] = chosen[2].coerceAtLeast(0.75f)
+        return Color.HSVToColor(chosen)
     }
 }

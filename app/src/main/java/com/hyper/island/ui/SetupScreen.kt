@@ -72,6 +72,7 @@ fun SetupScreen(settings: SettingsRepository) {
     val notificationsOn = remember(refresh) { Permissions.isNotificationListenerEnabled(context) }
     val serviceRunning by IslandAccessibilityService.running.collectAsState()
     val islandEnabled by settings.islandEnabled.collectAsState(initial = true)
+    val yieldDuringMedia by settings.yieldDuringMedia.collectAsState(initial = true)
 
     Box(
         Modifier
@@ -158,10 +159,13 @@ fun SetupScreen(settings: SettingsRepository) {
                     title = "Travar nos recentes",
                     body = "Abra a tela de apps recentes, segure o card do Dynamic Island 2.0 e toque no cadeado.",
                 )
-                InfoCard(
-                    title = "Hyper Island do sistema",
-                    body = "O HyperOS 3 tem uma ilha própria no mesmo lugar. Se as duas aparecerem juntas, " +
-                        "por enquanto use uma de cada vez; o modo de convivência vem nas próximas etapas.",
+                ToggleCard(
+                    title = "Ceder lugar ao Hyper Island",
+                    body = "Enquanto uma música ou vídeo toca, o Hyper Island do sistema aparece. " +
+                        "Com esta opção, a Dynamic Island 2.0 se esconde nesses momentos e volta quando o player para. " +
+                        "Requer o acesso às notificações.",
+                    checked = yieldDuringMedia,
+                    onCheckedChange = { value -> scope.launch { settings.setYieldDuringMedia(value) } },
                 )
             }
 
@@ -204,6 +208,28 @@ private fun StatusCard(running: Boolean, islandEnabled: Boolean, onToggle: (Bool
                 colors = SwitchDefaults.colors(checkedTrackColor = HyperColors.Ok),
             )
         }
+    }
+}
+
+@Composable
+private fun ToggleCard(title: String, body: String, checked: Boolean, onCheckedChange: (Boolean) -> Unit) {
+    HyperCard {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Text(
+                title,
+                color = HyperColors.TextPrimary,
+                fontSize = 15.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+            )
+            Switch(
+                checked = checked,
+                onCheckedChange = onCheckedChange,
+                colors = SwitchDefaults.colors(checkedTrackColor = HyperColors.Ok),
+            )
+        }
+        Spacer(Modifier.height(4.dp))
+        Text(body, color = HyperColors.TextSecondary, fontSize = 13.sp, lineHeight = 18.sp)
     }
 }
 
