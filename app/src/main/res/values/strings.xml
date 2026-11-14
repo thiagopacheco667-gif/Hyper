@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Dynamic Island 2.0</string>
+    <string name="accessibility_label">Dynamic Island 2.0</string>
+    <string name="accessibility_description">Desenha a Dynamic Island no topo da tela, sobre a barra de status, para que ela fique visível em qualquer app. Este serviço não lê o conteúdo da tela nem o que você digita.</string>
+</resources>
