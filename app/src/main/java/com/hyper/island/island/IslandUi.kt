@@ -8,7 +8,6 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateSizeAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
@@ -19,6 +18,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -56,25 +56,14 @@ import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.DpSize
-import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.hyper.island.integration.MediaInfo
 import com.hyper.island.system.BatteryInfo
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.StateFlow
 import java.time.LocalDateTime
 import java.time.format.DateTimeFormatter
-
-private object IslandColors {
-    val Surface = Color(0xFF000000)
-    val Primary = Color(0xFFFFFFFF)
-    val Secondary = Color(0xFF8E8E93)
-    val Track = Color(0xFF2C2C2E)
-    val Green = Color(0xFF30D158)
-    val Red = Color(0xFFFF453A)
-}
-
-private fun <T> islandSpring() = spring<T>(dampingRatio = 0.78f, stiffness = 420f)
 
 @Composable
 fun IslandRoot(
@@ -82,27 +71,26 @@ fun IslandRoot(
     battery: StateFlow<BatteryInfo>,
     actions: IslandActions,
 ) {
-    val mode by state.mode.collectAsState()
+    val screen by state.screen.collectAsState()
     val geometry by state.geometry.collectAsState()
+    val media by state.media.collectAsState()
+    val notifications by state.notifications.collectAsState()
     val bat by battery.collectAsState()
     val density = LocalDensity.current
     val view = LocalView.current
 
-    fun IntSize.toDp(): DpSize = with(density) { DpSize(width.toDp(), height.toDp()) }
-
-    val target = geometry.sizeFor(mode).toDp()
-    val expandedSize = geometry.expanded.toDp()
-
-    val targetPx = geometry.sizeFor(mode).let { Size(it.width.toFloat(), it.height.toFloat()) }
+    val target = IslandLayout.size(geometry, screen)
     val sizePx by animateSizeAsState(
-        targetValue = targetPx,
+        targetValue = Size(target.width.toFloat(), target.height.toFloat()),
         animationSpec = islandSpring(),
         label = "islandSize",
         finishedListener = { actions.onAnimationSettled() },
     )
     val size = with(density) { DpSize(sizePx.width.toDp(), sizePx.height.toDp()) }
+    val isPanel = screen is IslandScreen.Alert || screen is IslandScreen.Clock ||
+        screen is IslandScreen.Dashboard || screen is IslandScreen.Detail
     val corner by animateDpAsState(
-        targetValue = if (mode == IslandMode.EXPANDED) 34.dp else target.height / 2,
+        targetValue = if (isPanel) 34.dp else with(density) { (target.height / 2f).toDp() },
         animationSpec = islandSpring(),
         label = "islandCorner",
     )
@@ -127,20 +115,43 @@ fun IslandRoot(
                 },
         ) {
             AnimatedContent(
-                targetState = mode,
+                targetState = screen,
+                contentKey = { it.key },
                 transitionSpec = {
                     (fadeIn(tween(200, delayMillis = 170)) + scaleIn(tween(260, delayMillis = 140), initialScale = 0.94f))
                         .togetherWith(fadeOut(tween(90)))
                 },
                 label = "islandContent",
-            ) { m ->
-                when (m) {
-                    IslandMode.COMPACT -> CompactContent(bat)
-                    IslandMode.PEEK -> PeekContent(bat)
-                    IslandMode.EXPANDED -> ExpandedContent(bat, expandedSize)
+            ) { s ->
+                val full = IslandLayout.size(geometry, s).let { with(density) { DpSize(it.width.toDp(), it.height.toDp()) } }
+                // Cada tela é desenhada no tamanho final: durante a animação só é recortada, não reflui.
+                FixedFrame(full) {
+                    when (s) {
+                        IslandScreen.Compact -> CompactContent(bat)
+                        IslandScreen.CompactMedia -> CompactMediaContent(media)
+                        IslandScreen.Peek -> PeekContent(bat)
+                        IslandScreen.Clock -> ClockContent(bat)
+                        is IslandScreen.Alert -> notifications.firstOrNull { it.key == s.notificationKey }
+                            ?.let { AlertContent(it) }
+                        is IslandScreen.Dashboard -> DashboardContent(bat, media, notifications, actions)
+                        is IslandScreen.Detail -> notifications.firstOrNull { it.key == s.notificationKey }
+                            ?.let { NotificationDetail(it, actions) }
+                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun FixedFrame(size: DpSize, content: @Composable BoxScope.() -> Unit) {
+    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
+        Box(
+            Modifier
+                .wrapContentSize(Alignment.TopCenter, unbounded = true)
+                .size(size),
+            content = content,
+        )
     }
 }
 
@@ -176,6 +187,21 @@ private fun CompactContent(battery: BatteryInfo) {
     }
 }
 
+/** Cápsula com música tocando: capa à esquerda do furo, equalizador à direita. */
+@Composable
+private fun CompactMediaContent(media: MediaInfo?) {
+    Row(
+        Modifier
+            .fillMaxSize()
+            .padding(horizontal = 6.dp),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Artwork(media?.art, size = 18.dp, corner = 6.dp)
+        if (media?.isPlaying == true) EqualizerBars(Modifier.padding(end = 3.dp)) else Spacer(Modifier.size(16.dp))
+    }
+}
+
 @Composable
 private fun PeekContent(battery: BatteryInfo) {
     val accent = if (battery.charging) IslandColors.Green else IslandColors.Red
@@ -208,9 +234,43 @@ private fun PeekContent(battery: BatteryInfo) {
     }
 }
 
+/** Painel sem música nem notificações: relógio grande e anel de bateria. */
 @Composable
-private fun ExpandedContent(battery: BatteryInfo, fullSize: DpSize) {
-    // Relógio atualizado uma vez por minuto, só enquanto o painel está aberto.
+private fun ClockContent(battery: BatteryInfo) {
+    val dateTime = rememberMinuteClock()
+    val time = remember(dateTime) { dateTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
+    val date = remember(dateTime) {
+        dateTime.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM")).replaceFirstChar { it.uppercase() }
+    }
+    Column(
+        Modifier
+            .fillMaxSize()
+            .padding(start = 22.dp, end = 20.dp, top = 18.dp, bottom = 14.dp),
+    ) {
+        Row(
+            Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Top,
+        ) {
+            Column {
+                Text(time, color = IslandColors.Primary, fontSize = 38.sp, fontWeight = FontWeight.Light)
+                Text(date, color = IslandColors.Secondary, fontSize = 13.sp, maxLines = 1)
+            }
+            BatteryRing(battery, ringSize = 62.dp)
+        }
+        Spacer(Modifier.weight(1f))
+        Text(
+            text = "Toque para recolher · segure para abrir os ajustes",
+            color = IslandColors.Secondary.copy(alpha = 0.6f),
+            fontSize = 11.sp,
+            maxLines = 1,
+        )
+    }
+}
+
+/** Hora local, atualizada uma vez por minuto enquanto a tela está visível. */
+@Composable
+internal fun rememberMinuteClock(): LocalDateTime {
     var now by remember { mutableLongStateOf(System.currentTimeMillis()) }
     LaunchedEffect(Unit) {
         while (true) {
@@ -218,40 +278,7 @@ private fun ExpandedContent(battery: BatteryInfo, fullSize: DpSize) {
             delay(60_000L - (now % 60_000L))
         }
     }
-    val dateTime = remember(now) { LocalDateTime.now() }
-    val time = remember(dateTime) { dateTime.format(DateTimeFormatter.ofPattern("HH:mm")) }
-    val date = remember(dateTime) {
-        dateTime.format(DateTimeFormatter.ofPattern("EEEE, d 'de' MMMM")).replaceFirstChar { it.uppercase() }
-    }
-
-    // Layout fixo no tamanho final: durante a animação o conteúdo é só recortado, não reflui.
-    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.TopCenter) {
-        Column(
-            Modifier
-                .wrapContentSize(Alignment.TopCenter, unbounded = true)
-                .size(fullSize)
-                .padding(start = 22.dp, end = 20.dp, top = 18.dp, bottom = 14.dp),
-        ) {
-            Row(
-                Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.Top,
-            ) {
-                Column {
-                    Text(time, color = IslandColors.Primary, fontSize = 38.sp, fontWeight = FontWeight.Light)
-                    Text(date, color = IslandColors.Secondary, fontSize = 13.sp, maxLines = 1)
-                }
-                BatteryRing(battery, ringSize = 62.dp)
-            }
-            Spacer(Modifier.weight(1f))
-            Text(
-                text = "Toque para recolher · segure para abrir os ajustes",
-                color = IslandColors.Secondary.copy(alpha = 0.6f),
-                fontSize = 11.sp,
-                maxLines = 1,
-            )
-        }
-    }
+    return remember(now) { LocalDateTime.now() }
 }
 
 @Composable
@@ -314,7 +341,7 @@ private fun BatteryRing(battery: BatteryInfo, ringSize: Dp) {
 
 /** Ícone de bateria desenhado à mão (sem dependência de pacotes de ícones). */
 @Composable
-private fun BatteryGlyph(battery: BatteryInfo, modifier: Modifier = Modifier) {
+internal fun BatteryGlyph(battery: BatteryInfo, modifier: Modifier = Modifier) {
     val fill = when {
         battery.charging -> IslandColors.Green
         battery.low -> IslandColors.Red

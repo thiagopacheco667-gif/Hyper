@@ -6,7 +6,6 @@ import android.hardware.display.DisplayManager
 import android.view.Display
 import android.view.WindowManager
 import androidx.compose.ui.unit.IntSize
-import com.hyper.island.island.IslandMode
 import kotlin.math.roundToInt
 
 /**
@@ -19,14 +18,12 @@ data class IslandGeometry(
     val top: Int,
     val compact: IntSize,
     val peek: IntSize,
-    val expanded: IntSize,
+    /** Largura dos painéis grandes (alerta, painel expandido). */
+    val panelWidth: Int,
     val landscape: Boolean,
+    val density: Float,
 ) {
-    fun sizeFor(mode: IslandMode): IntSize = when (mode) {
-        IslandMode.COMPACT -> compact
-        IslandMode.PEEK -> peek
-        IslandMode.EXPANDED -> expanded
-    }
+    fun dp(value: Float): Int = (value * density).roundToInt()
 
     /** X da janela para que ela fique centrada no recorte sem sair da tela. */
     fun windowX(width: Int): Int = (centerX - width / 2).coerceIn(0, (screenWidth - width).coerceAtLeast(0))
@@ -36,7 +33,6 @@ data class IslandGeometry(
         const val COMPACT_WIDTH_DP = 96f
         const val COMPACT_HEIGHT_DP = 28f
         const val PEEK_WIDTH_DP = 196f
-        const val EXPANDED_HEIGHT_DP = 150f
 
         fun compute(context: Context, windowManager: WindowManager): IslandGeometry {
             val density = context.resources.displayMetrics.density
@@ -63,8 +59,7 @@ data class IslandGeometry(
 
             val compactWidth = dp(COMPACT_WIDTH_DP)
             val peekWidth = dp(PEEK_WIDTH_DP).coerceAtMost(width - dp(24f))
-            val expandedWidth = (width - dp(24f)).coerceAtMost(dp(400f))
-            val expandedHeight = dp(EXPANDED_HEIGHT_DP)
+            val panelWidth = (width - dp(24f)).coerceAtMost(dp(400f))
 
             return IslandGeometry(
                 screenWidth = width,
@@ -72,8 +67,9 @@ data class IslandGeometry(
                 top = top,
                 compact = IntSize(compactWidth, compactHeight),
                 peek = IntSize(peekWidth, compactHeight),
-                expanded = IntSize(expandedWidth, expandedHeight),
+                panelWidth = panelWidth,
                 landscape = landscape,
+                density = density,
             )
         }
     }

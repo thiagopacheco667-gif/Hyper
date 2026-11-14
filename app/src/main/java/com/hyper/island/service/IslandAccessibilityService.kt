@@ -2,12 +2,15 @@ package com.hyper.island.service
 
 import android.accessibilityservice.AccessibilityService
 import android.content.res.Configuration
+import android.service.notification.NotificationListenerService
 import android.view.WindowManager
 import android.view.accessibility.AccessibilityEvent
 import com.hyper.island.data.SettingsRepository
+import com.hyper.island.integration.NotificationRepository
 import com.hyper.island.island.IslandMode
 import com.hyper.island.overlay.IslandWindowController
 import com.hyper.island.system.BatteryMonitor
+import com.hyper.island.system.Permissions
 import kotlinx.coroutines.MainScope
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,11 +39,16 @@ class IslandAccessibilityService : AccessibilityService() {
 
         val wm = getSystemService(WindowManager::class.java)
         val monitor = BatteryMonitor(this) { controller?.peek() }
-        val islandController = IslandWindowController(this, wm, monitor)
+        val islandController = IslandWindowController(this, wm, monitor, scope)
         battery = monitor
         controller = islandController
         monitor.start()
         _running.value = true
+
+        // Se o acesso a notificações está concedido mas o HyperOS derrubou o listener, pede para religar.
+        if (Permissions.isNotificationListenerEnabled(this) && !NotificationRepository.connected.value) {
+            runCatching { NotificationListenerService.requestRebind(IslandNotificationListener.component(this)) }
+        }
 
         scope.launch {
             SettingsRepository(applicationContext).islandEnabled.collect { enabled ->

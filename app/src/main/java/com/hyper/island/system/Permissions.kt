@@ -11,7 +11,9 @@ import android.os.Build
 import android.os.PowerManager
 import android.provider.Settings
 import android.view.accessibility.AccessibilityManager
+import androidx.core.app.NotificationManagerCompat
 import com.hyper.island.service.IslandAccessibilityService
+import com.hyper.island.service.IslandNotificationListener
 
 /** Verificações de permissão e atalhos para as telas certas do Android e do HyperOS. */
 object Permissions {
@@ -29,6 +31,18 @@ object Permissions {
             info.packageName == context.packageName && info.name == target
         }
     }
+
+    fun isNotificationListenerEnabled(context: Context): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(context).contains(context.packageName)
+
+    fun openNotificationListenerSettings(context: Context) = launch(
+        context,
+        Intent(Settings.ACTION_NOTIFICATION_LISTENER_DETAIL_SETTINGS).putExtra(
+            Settings.EXTRA_NOTIFICATION_LISTENER_COMPONENT_NAME,
+            IslandNotificationListener.component(context).flattenToString(),
+        ),
+        fallback = Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS),
+    )
 
     fun isIgnoringBatteryOptimizations(context: Context): Boolean =
         context.getSystemService(PowerManager::class.java)?.isIgnoringBatteryOptimizations(context.packageName) == true

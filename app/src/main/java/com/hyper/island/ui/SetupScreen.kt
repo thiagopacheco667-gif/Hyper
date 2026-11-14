@@ -69,6 +69,7 @@ fun SetupScreen(settings: SettingsRepository) {
 
     val accessibilityOn = remember(refresh) { Permissions.isAccessibilityEnabled(context) }
     val batteryOk = remember(refresh) { Permissions.isIgnoringBatteryOptimizations(context) }
+    val notificationsOn = remember(refresh) { Permissions.isNotificationListenerEnabled(context) }
     val serviceRunning by IslandAccessibilityService.running.collectAsState()
     val islandEnabled by settings.islandEnabled.collectAsState(initial = true)
 
@@ -88,7 +89,7 @@ fun SetupScreen(settings: SettingsRepository) {
             Spacer(Modifier.height(36.dp))
             Text("Dynamic Island 2.0", color = HyperColors.TextPrimary, fontSize = 30.sp, fontWeight = FontWeight.Bold)
             Text(
-                "Etapa 1 · Fundação",
+                "Etapa 2 · Música e notificações",
                 color = HyperColors.TextSecondary,
                 fontSize = 14.sp,
             )
@@ -110,12 +111,21 @@ fun SetupScreen(settings: SettingsRepository) {
                 onAction = { Permissions.openAccessibilitySettings(context) },
             )
 
-            if (!accessibilityOn) {
+            PermissionCard(
+                title = "Acesso às notificações",
+                description = "Mostra notificações novas na ilha e identifica a música tocando (capa, título e controles). " +
+                    "O conteúdo fica só no aparelho.",
+                granted = notificationsOn,
+                actionLabel = "Permitir acesso",
+                onAction = { Permissions.openNotificationListenerSettings(context) },
+            )
+
+            if (!accessibilityOn || !notificationsOn) {
                 InfoCard(
                     title = "A opção aparece bloqueada?",
                     body = "Apps instalados por APK têm \"configurações restritas\". Abra as informações do app, " +
                         "toque nos três pontos (⋮) no canto superior e escolha \"Permitir configurações restritas\". " +
-                        "Depois volte e ative o serviço.",
+                        "Depois volte e ative a permissão.",
                     actionLabel = "Informações do app",
                     onAction = { Permissions.openAppDetails(context) },
                 )
@@ -158,8 +168,9 @@ fun SetupScreen(settings: SettingsRepository) {
             SectionTitle("Como usar")
             InfoCard(
                 title = "Gestos",
-                body = "Toque na ilha para abrir o painel. Toque de novo ou fora dela para recolher. " +
-                    "Segure para voltar a esta tela. Ao conectar o carregador, a ilha mostra o aviso de carga.",
+                body = "Toque na ilha para abrir o painel com música e notificações. Toque numa área vazia ou fora dela para recolher. " +
+                    "Quando chega uma notificação, a ilha mostra uma prévia; toque nela para ver tudo, abrir ou dispensar. " +
+                    "Segure a ilha para voltar a esta tela.",
             )
             Spacer(Modifier.height(24.dp))
         }
