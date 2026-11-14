@@ -129,7 +129,7 @@ fun IslandRoot(
             AnimatedContent(
                 targetState = mode,
                 transitionSpec = {
-                    (fadeIn(tween(220, delayMillis = 110)) + scaleIn(tween(260, delayMillis = 80), initialScale = 0.92f))
+                    (fadeIn(tween(200, delayMillis = 170)) + scaleIn(tween(260, delayMillis = 140), initialScale = 0.94f))
                         .togetherWith(fadeOut(tween(90)))
                 },
                 label = "islandContent",
